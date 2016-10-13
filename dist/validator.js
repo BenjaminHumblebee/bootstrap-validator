@@ -42,6 +42,7 @@
     })
 
     this.$inputs.filter(function () { return getValue($(this)) }).trigger('focusout')
+	this.$customs.filter(function () { return getValue($(this)) }).trigger('focusout')
 
     this.$element.attr('novalidate', true) // disable automatic native validation
     this.toggleSubmit()
@@ -49,7 +50,8 @@
 
   Validator.VERSION = '0.11.5'
 
-  Validator.INPUT_SELECTOR = ':input:not([type="hidden"], [type="submit"], [type="reset"], button), .custom-selector'
+  Validator.INPUT_SELECTOR = ':input:not([type="hidden"], [type="submit"], [type="reset"], button)'
+  Validator.CUSTOM_SELECTOR = '.custom-selector';
 
   Validator.FOCUS_OFFSET = 20
 
@@ -90,6 +92,9 @@
     this.$inputs = this.$element.find(Validator.INPUT_SELECTOR)
       .add(this.$element.find('[data-validate="true"]'))
       .not(this.$element.find('[data-validate="false"]'))
+	  
+	this.$customs = this.$element.find(Validator.CUSTOM_SELECTOR)
+	  .not(this.$element.find('[data-validate="false"]'));
 
     return this
   }
@@ -99,7 +104,7 @@
     var $el         = $(e.target)
     var deferErrors = e.type !== 'focusout'
 
-    if (!this.$inputs.is($el)) return
+    if (!this.$inputs.is($el) && !this.$customs.is($el)) return
 
     this.validateInput($el, deferErrors).done(function () {
       self.toggleSubmit()
@@ -154,6 +159,11 @@
 
     function getValidityStateError() {
       var validity = $el[0].validity
+	  
+	  if (typeof (validity) === 'undefined') {
+		return;
+	  }
+	  
       return validity.typeMismatch    ? $el.data('type-error')
            : validity.patternMismatch ? $el.data('pattern-error')
            : validity.stepMismatch    ? $el.data('step-error')
@@ -200,6 +210,8 @@
 
     $.when(this.$inputs.map(function (el) {
       return self.validateInput($(this), false)
+    })).then(this.$customs.map(function (el) {
+      return self.validateInput($(this), false)
     })).then(function () {
       self.toggleSubmit()
       self.focusError()
@@ -221,7 +233,7 @@
   Validator.prototype.showErrors = function ($el) {
     var method = this.options.html ? 'html' : 'text'
     var errors = $el.data('bs.validator.errors')
-    var $group = $el.closest('.form-group')
+    var $group = $el.closest('.form-group, .custom-group')
     var $block = $group.find('.help-block.with-errors')
     var $feedback = $group.find('.form-control-feedback')
 
@@ -262,7 +274,7 @@
       return !!($(this).data('bs.validator.errors') || []).length
     }
 
-    return !!this.$inputs.filter(fieldErrors).length
+    return !!this.$inputs.filter(fieldErrors).length || !!this.$customs.filter(fieldErrors).length
   }
 
   Validator.prototype.isIncomplete = function () {
@@ -271,7 +283,7 @@
       return !(typeof value == "string" ? $.trim(value) : value)
     }
 
-    return !!this.$inputs.filter('[required]').filter(fieldIncomplete).length
+    return !!this.$inputs.filter('[required]').filter(fieldIncomplete).length || !!this.$customs.filter('[required]').filter(fieldIncomplete).length
   }
 
   Validator.prototype.onSubmit = function (e) {
@@ -295,8 +307,16 @@
     this.$element.find('.form-control-feedback')
       .removeClass(this.options.feedback.error)
       .removeClass(this.options.feedback.success)
-
-    this.$inputs
+	  
+	this.$inputs
+      .removeData(['bs.validator.errors', 'bs.validator.deferred'])
+      .each(function () {
+        var $this = $(this)
+        var timeout = $this.data('bs.validator.timeout')
+        window.clearTimeout(timeout) && $this.removeData('bs.validator.timeout')
+      })
+	  
+	this.$customs
       .removeData(['bs.validator.errors', 'bs.validator.deferred'])
       .each(function () {
         var $this = $(this)
@@ -330,6 +350,9 @@
       .off('.bs.validator')
 
     this.$inputs
+      .off('.bs.validator')
+	  
+	this.$customs
       .off('.bs.validator')
 
     this.options    = null
